@@ -1,4 +1,9 @@
 # smallchat
+
+
+>一直对go语言网络模块的代码知其然不知其所以然，直到看到这个使用net的聊天室代码
+> ，才对net有一种捅破纱的感觉，感谢作者！
+
 A minimal programming example for a chat server in Go.
 
 Redis作者 Salvatore Sanfilippo 最近创建一个新的演示项目：[smallchat](https://github.com/antirez/smallchat)，用了200行代码实现了一个聊天室。这个项目的目的是展示如何用Go语言实现一个简单的聊天服务器。
