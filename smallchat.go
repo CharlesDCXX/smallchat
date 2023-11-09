@@ -19,8 +19,15 @@ var (
 )
 
 type Client struct {
-	conn net.Conn
-	nick string
+	conn     net.Conn
+	nick     string
+	readChan chan string
+}
+
+func (c Client) startRecv() {
+	for msg := range c.readChan {
+		c.conn.Write([]byte(msg))
+	}
 }
 
 type ChatState struct {
@@ -55,6 +62,8 @@ func handleClient(client *Client) {
 		if err != nil {
 			fmt.Printf("client left: %s\n", client.conn.RemoteAddr())
 			chatState.clientsLock.Lock()
+			close(client.readChan)
+			client.conn.Close()
 			delete(chatState.clients, client.conn)
 			chatState.numClients--
 			chatState.clientsLock.Unlock()
@@ -68,6 +77,10 @@ func handleClient(client *Client) {
 			parts := strings.SplitN(msg, " ", 2)
 			cmd := parts[0]
 			if cmd == "/nick" && len(parts) > 1 {
+				if len(parts[1]) > maxNickLen {
+					client.conn.Write([]byte("nick name too long\n"))
+					continue
+				}
 				client.nick = parts[1]
 			}
 			continue
@@ -77,9 +90,9 @@ func handleClient(client *Client) {
 
 		// 将消息转发给其他客户端
 		chatState.clientsLock.RLock()
-		for conn, cl := range chatState.clients {
+		for _, cl := range chatState.clients {
 			if cl != client {
-				conn.Write([]byte(client.nick + ": " + msg + "\n"))
+				cl.readChan <- client.nick + ": " + msg + "\n"
 			}
 		}
 		chatState.clientsLock.RUnlock()
@@ -100,14 +113,21 @@ func main() {
 
 		client := &Client{conn: conn}
 		client.nick = fmt.Sprintf("user%d", conn.RemoteAddr().(*net.TCPAddr).Port)
+		client.readChan = make(chan string, 5)
 
 		chatState.clientsLock.Lock()
+		if chatState.numClients >= maxClients {
+			fmt.Printf("too many clients, reject %s\n", conn.RemoteAddr())
+			conn.Close()
+			chatState.clientsLock.Unlock()
+			continue
+		}
 		chatState.clients[conn] = client
 		chatState.numClients++
 		chatState.clientsLock.Unlock()
 
 		go handleClient(client)
-
+		go client.startRecv()
 		fmt.Printf("new client: %s\n", conn.RemoteAddr())
 	}
 }
